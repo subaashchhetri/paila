@@ -1,0 +1,174 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  passwordHash   String?        // Used for local mock auth mode
+  firebaseUid    String?        @unique // Firebase Auth UID
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  
+  profile        UserProfile?
+  wallets        Wallet[]
+  todos          Todo[]
+  routines       WeeklyRoutine[]
+  expenses       Expense[]
+  incomes        Income[]
+  loansGiven     LoanGiven[]
+  loansTaken     LoanTaken[]
+  transactions   Transaction[]
+  notifications  Notification[]
+}
+
+model UserProfile {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String
+  phone                 String?
+  address               String?
+  occupation            String?
+  onboardingCompleted   Boolean  @default(false)
+  openingBalancesSetup  Boolean  @default(false)
+  avatarUrl             String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model Wallet {
+  id           String        @id @default(uuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String        // "Cash", "Bank", "eSewa"
+  balance      Float         @default(0.0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  expenses     Expense[]
+  incomes      Income[]
+  transactions Transaction[]
+
+  @@unique([userId, name])
+}
+
+model Todo {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  priority    String    // "High", "Medium", "Low"
+  category    String    // "Personal", "Work", "Study", "Business", "Finance", "Health"
+  status      String    @default("Pending") // "Pending", "Completed", "Overdue"
+  deadline    DateTime?
+  repeat      String    @default("None") // "None", "Daily", "Weekly", "Monthly", "Yearly"
+  reminder    Boolean   @default(false)
+  notes       String?
+  attachmentUrl String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model WeeklyRoutine {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayOfWeek String   // "Monday", "Tuesday", etc.
+  items     String   // JSON stringified array of routine items: '["Gym", "Study"]'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, dayOfWeek])
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount      Float
+  category    String   // "Food", "Fuel", "Shopping", "Travel", "Business", "Investment", "Entertainment", "Medical", "Bills", "Other"
+  description String?
+  date        DateTime @default(now())
+  receiptUrl  String?
+  createdAt   DateTime @default(now())
+}
+
+model Income {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId    String
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  amount      Float
+  source      String   // "Salary", "Business", "Freelancing", "Gift", "Investment", "Other"
+  description String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+
+model LoanGiven {
+  id                 String    @id @default(uuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  phone              String?
+  amount             Float
+  purpose            String?
+  date               DateTime  @default(now())
+  expectedReturnDate DateTime?
+  status             String    @default("Pending") // "Pending", "Partial", "Completed"
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model LoanTaken {
+  id                 String    @id @default(uuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  phone              String?
+  amount             Float
+  purpose            String?
+  date               DateTime  @default(now())
+  expectedReturnDate DateTime?
+  status             String    @default("Pending") // "Pending", "Partial", "Completed"
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model Transaction {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  walletId    String?
+  wallet      Wallet?  @relation(fields: [walletId], references: [id], onDelete: SetNull)
+  type        String   // "Income", "Expense", "LoanGiven", "LoanTaken", "LoanGivenRepaid", "LoanTakenRepaid"
+  amount      Float
+  category    String   // Source, category, or contact name depending on type
+  description String?
+  date        DateTime @default(now())
+  referenceId String?  // ID referencing the parent Expense, Income, or Loan table
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // "TaskReminder", "ExpenseReminder", "LoanReminder", "DailyMotivation", "MorningGreeting", "NightReminder"
+  title       String
+  message     String
+  isRead      Boolean  @default(false)
+  scheduledAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+}

@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
+import path from 'path';
 
 // Routes imports (will be created next)
 import authRoutes from './routes/auth.js';
@@ -54,9 +55,15 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Base route
-app.get('/', (req, res) => {
-  res.json({ message: 'Welcome to Paila Todo API - Plan first, then do.' });
+// Serve static assets from the React frontend build
+app.use(express.static(path.join(__dirname, '../../client/dist')));
+
+// Serve React client for all non-API requests
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
 });
 
 // Global error handler

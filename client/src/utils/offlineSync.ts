@@ -117,35 +117,67 @@ const updateCacheOptimistically = async (url: string, method: string, bodyObj: a
   try {
     // 1. TODOS Caching
     if (url.includes('/api/todos')) {
-      const cacheKey = '/api/todos';
-      const cached = await getFromStore('api_cache', cacheKey);
-      let todos = cached ? cached.data : [];
+      // Find all cached todo queries (e.g., /api/todos, /api/todos?status=Pending)
+      const allCaches = await getAllFromStore('api_cache');
+      const todoCacheKeys = allCaches
+        .map((c: any) => c.url)
+        .filter((k: string) => k.startsWith('/api/todos'));
 
-      if (method === 'POST') {
-        const newTodo = {
-          id: tempId,
-          title: bodyObj.title,
-          description: bodyObj.description || '',
-          priority: bodyObj.priority || 'Medium',
-          category: bodyObj.category || 'Personal',
-          deadline: bodyObj.deadline || null,
-          repeat: bodyObj.repeat || 'None',
-          reminder: bodyObj.reminder || false,
-          notes: bodyObj.notes || '',
-          status: 'Pending',
-          createdAt: new Date().toISOString()
-        };
-        todos = [newTodo, ...todos];
-      } else if (method === 'PUT') {
-        // url is like /api/todos/:id
-        const id = url.split('/').pop();
-        todos = todos.map((t: any) => (t.id === id ? { ...t, ...bodyObj } : t));
-      } else if (method === 'DELETE') {
-        const id = url.split('/').pop();
-        todos = todos.filter((t: any) => t.id !== id);
+      // If /api/todos is not in cache keys, make sure we include it as the base key
+      if (!todoCacheKeys.includes('/api/todos')) {
+        todoCacheKeys.push('/api/todos');
       }
 
-      await setToStore('api_cache', { url: cacheKey, data: todos });
+      for (const key of todoCacheKeys) {
+        const cached = await getFromStore('api_cache', key);
+        let todos = cached ? cached.data : [];
+        if (!Array.isArray(todos)) {
+          todos = [];
+        }
+
+        if (method === 'POST') {
+          const newTodo = {
+            id: tempId,
+            title: bodyObj.title,
+            description: bodyObj.description || '',
+            priority: bodyObj.priority || 'Medium',
+            category: bodyObj.category || 'Personal',
+            deadline: bodyObj.deadline || null,
+            repeat: bodyObj.repeat || 'None',
+            reminder: bodyObj.reminder || false,
+            notes: bodyObj.notes || '',
+            status: 'Pending',
+            createdAt: new Date().toISOString()
+          };
+          
+          let shouldAdd = true;
+          if (key.includes('status=Completed')) {
+            shouldAdd = false;
+          }
+          
+          if (shouldAdd) {
+            todos = [newTodo, ...todos];
+          }
+        } else if (method === 'PUT') {
+          // url is like /api/todos/:id or /api/todos/temp_id
+          const id = url.split('/').pop();
+          todos = todos.map((t: any) => (t.id === id ? { ...t, ...bodyObj } : t));
+          
+          // If status was changed, adjust lists filtering
+          if (bodyObj.status) {
+            if (key.includes('status=Pending') && bodyObj.status === 'Completed') {
+              todos = todos.filter((t: any) => t.id !== id);
+            } else if (key.includes('status=Completed') && bodyObj.status === 'Pending') {
+              todos = todos.filter((t: any) => t.id !== id);
+            }
+          }
+        } else if (method === 'DELETE') {
+          const id = url.split('/').pop();
+          todos = todos.filter((t: any) => t.id !== id);
+        }
+
+        await setToStore('api_cache', { url: key, data: todos });
+      }
     }
 
     // 2. ROUTINES Caching
@@ -523,47 +555,46 @@ export const initializeOfflineSync = () => {
       }
     }
 
-    // Handle Mutation (Write) Requests: POST, PUT, DELETE
-    if (isOffline) {
+    const handleOfflineMutation = async (targetCacheKey: string, mutationMethod: string, requestInit?: RequestInit): Promise<Response> => {
       // 1. Generate temp ID
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
       // 2. Parse body
       let bodyObj: any = {};
-      if (init?.body) {
+      if (requestInit?.body) {
         try {
-          bodyObj = JSON.parse(init.body as string);
+          bodyObj = JSON.parse(requestInit.body as string);
         } catch (_) {}
       }
 
       // 3. Store in Sync Queue
       await setToStore('sync_queue', {
-        url: cacheKey,
-        method,
-        headers: init?.headers || {},
-        body: init?.body || '',
+        url: targetCacheKey,
+        method: mutationMethod,
+        headers: requestInit?.headers || {},
+        body: requestInit?.body || '',
         timestamp: Date.now(),
         tempId
       });
 
       // 4. Update the IndexedDB GET cache optimistically so UI refreshes correctly
-      await updateCacheOptimistically(cacheKey, method, bodyObj, tempId);
+      await updateCacheOptimistically(targetCacheKey, mutationMethod, bodyObj, tempId);
 
       // 5. Notify layout that queue length changed
       notifyStatusChange();
 
       // 6. Return simulated response
       let mockRes: any = { success: true };
-      if (cacheKey.includes('/api/todos') && method === 'POST') {
+      if (targetCacheKey.includes('/api/todos') && mutationMethod === 'POST') {
         mockRes = { id: tempId, ...bodyObj, status: 'Pending' };
-      } else if ((cacheKey.includes('/api/finance/expense') || cacheKey.includes('/api/finance/income')) && method === 'POST') {
+      } else if ((targetCacheKey.includes('/api/finance/expense') || targetCacheKey.includes('/api/finance/income')) && mutationMethod === 'POST') {
         mockRes = {
-          expense: cacheKey.includes('/expense') ? { id: tempId, ...bodyObj } : undefined,
-          income: cacheKey.includes('/income') ? { id: tempId, ...bodyObj } : undefined,
+          expense: targetCacheKey.includes('/expense') ? { id: tempId, ...bodyObj } : undefined,
+          income: targetCacheKey.includes('/income') ? { id: tempId, ...bodyObj } : undefined,
           walletBalance: 0,
           warning: null
         };
-      } else if (cacheKey.includes('/api/loans') && method === 'POST') {
+      } else if (targetCacheKey.includes('/api/loans') && mutationMethod === 'POST') {
         mockRes = { id: tempId, ...bodyObj, status: 'Pending', paybackAmount: 0 };
       }
 
@@ -571,10 +602,23 @@ export const initializeOfflineSync = () => {
         status: 200,
         headers: { 'Content-Type': 'application/json', 'x-offline-simulation': 'true' }
       });
+    };
+
+    // Handle Mutation (Write) Requests: POST, PUT, DELETE
+    if (isOffline) {
+      return handleOfflineMutation(cacheKey, method, init);
     }
 
-    // If online, send request normally
-    return originalFetch(getAbsoluteUrl(url), init);
+    // If online, try sending request normally, falling back to offline mode on connection failure
+    try {
+      const res = await originalFetch(getAbsoluteUrl(url), init);
+      return res;
+    } catch (e) {
+      console.warn('Network mutation failed, falling back to offline sync queue:', e);
+      isOffline = true;
+      notifyStatusChange();
+      return handleOfflineMutation(cacheKey, method, init);
+    }
   };
 
   // Sync on startup in case there are pending items from previous sessions

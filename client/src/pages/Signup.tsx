@@ -10,6 +10,7 @@ export const Signup: React.FC = () => {
 
 
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -19,8 +20,23 @@ export const Signup: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name || !email || !password || !confirmPassword) {
+    if (!name || !username || !email || !password || !confirmPassword) {
       showToast('Please fill in all required fields', 'warning');
+      return;
+    }
+
+    if (username.includes('@')) {
+      showToast('Username must not contain the @ symbol', 'warning');
+      return;
+    }
+
+    if (username.length < 3) {
+      showToast('Username must be at least 3 characters long', 'warning');
+      return;
+    }
+
+    if (!email.includes('@')) {
+      showToast('Please enter a valid email address containing @', 'warning');
       return;
     }
 
@@ -36,7 +52,7 @@ export const Signup: React.FC = () => {
 
     try {
       setLoading(true);
-      await registerLocal(name, email, phone, password);
+      await registerLocal(name, username, email, phone, password);
       // If registration succeeds, registerLocal automatically calls loginLocal, which updates context.
       // We navigate directly to the onboarding route.
       navigate('/onboard');
@@ -71,6 +87,22 @@ export const Signup: React.FC = () => {
                 placeholder="Subash Adhikari"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                disabled={loading}
+                className="w-full pl-10 pr-4 py-2.5 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Username *</label>
+            <div className="relative">
+              <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Choose a username (e.g. subash)"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 disabled={loading}
                 className="w-full pl-10 pr-4 py-2.5 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
                 required

@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 
 export interface AuthenticatedRequest extends Request {
   userId?: string;
-  email?: string;
+  username?: string;
 }
 
 export async function authenticateToken(
@@ -39,22 +39,23 @@ export async function authenticateToken(
       });
 
       if (!user) {
-        // Double check by email in case of password signup turning to Firebase login later
+        // Double check by username in case of password signup turning to Firebase login later
         user = await prisma.user.findUnique({
-          where: { email }
+          where: { username: email }
         });
 
         if (user) {
           // Link firebase account
           user = await prisma.user.update({
-            where: { email },
+            where: { username: email },
             data: { firebaseUid }
           });
         } else {
           // Create new user record
           user = await prisma.user.create({
             data: {
-              email,
+              username: email,
+              email: email,
               firebaseUid,
               profile: {
                 create: {
@@ -70,7 +71,7 @@ export async function authenticateToken(
       }
 
       req.userId = user.id;
-      req.email = email;
+      req.username = email;
       return next();
     } catch (firebaseError: any) {
       console.warn('Firebase authentication failed, attempting local JWT fallback...', firebaseError.message);
@@ -81,7 +82,7 @@ export async function authenticateToken(
   // 2. Local JWT Fallback Mode
   const jwtSecret = process.env.JWT_SECRET || 'pailatododevelopmentjwtsecretmustbelongandsecure';
   try {
-    const decoded = jwt.verify(token, jwtSecret) as { userId: string; email: string };
+    const decoded = jwt.verify(token, jwtSecret) as { userId: string; username: string };
     
     // Validate that the user exists in database
     const user = await prisma.user.findUnique({
@@ -93,7 +94,7 @@ export async function authenticateToken(
     }
 
     req.userId = decoded.userId;
-    req.email = decoded.email;
+    req.username = decoded.username;
     next();
   } catch (jwtError) {
     return res.status(403).json({ error: 'Invalid or expired access token' });

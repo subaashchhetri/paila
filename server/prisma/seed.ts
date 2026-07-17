@@ -8,7 +8,7 @@ async function main() {
 
   // 1. Check if user already exists
   const existingUser = await prisma.user.findUnique({
-    where: { email: 'nepal@paila.com' }
+    where: { username: 'subash' }
   });
 
   if (existingUser) {
@@ -20,7 +20,8 @@ async function main() {
   const passwordHash = await bcrypt.hash('password123', 10);
   const user = await prisma.user.create({
     data: {
-      email: 'nepal@paila.com',
+      username: 'subash',
+      email: 'subash@paila.com',
       passwordHash: passwordHash,
       profile: {
         create: {

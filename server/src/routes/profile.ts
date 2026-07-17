@@ -157,6 +157,7 @@ router.post('/onboard', authenticateToken, validate(onboardSchema), async (req: 
       message: 'Onboarding completed successfully',
       user: {
         id: user?.id,
+        username: user?.username,
         email: user?.email,
         profile: user?.profile,
         wallets: user?.wallets

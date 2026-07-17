@@ -19,6 +19,7 @@ interface UserProfile {
 
 interface User {
   id: string;
+  username: string;
   email: string;
   profile: UserProfile;
 }
@@ -29,8 +30,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   token: string | null;
   firebaseActive: boolean;
-  loginLocal: (email: string, password: string) => Promise<void>;
-  registerLocal: (name: string, email: string, phone: string, password: string) => Promise<void>;
+  loginLocal: (username: string, password: string) => Promise<void>;
+  registerLocal: (name: string, username: string, email: string, phone: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   completeOnboarding: (data: {
@@ -87,12 +88,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [token]);
 
   // 1. Local Registration
-  const registerLocal = async (name: string, email: string, phone: string, password: string) => {
+  const registerLocal = async (name: string, username: string, email: string, phone: string, password: string) => {
     try {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone, password })
+        body: JSON.stringify({ name, username, email, phone, password })
       });
 
       const data = await res.json();
@@ -104,7 +105,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       showToast('Registration successful! Logging you in...', 'success');
       
       // Auto login after local registration
-      await loginLocal(email, password);
+      await loginLocal(username, password);
     } catch (error: any) {
       showToast(error.message, 'error');
       throw error;
@@ -112,12 +113,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // 2. Local Login
-  const loginLocal = async (email: string, password: string) => {
+  const loginLocal = async (username: string, password: string) => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ username, password })
       });
 
       const data = await res.json();

@@ -1,6 +1,6 @@
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -9,6 +9,7 @@ generator client {
 
 model User {
   id             String         @id @default(uuid())
+  username       String         @unique
   email          String         @unique
   passwordHash   String?        // Used for local mock auth mode
   firebaseUid    String?        @unique // Firebase Auth UID
@@ -25,6 +26,7 @@ model User {
   loansTaken     LoanTaken[]
   transactions   Transaction[]
   notifications  Notification[]
+  budgets        Budget[]
 }
 
 model UserProfile {
@@ -171,4 +173,16 @@ model Notification {
   isRead      Boolean  @default(false)
   scheduledAt DateTime @default(now())
   createdAt   DateTime @default(now())
+}
+
+model Budget {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String
+  amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
 }

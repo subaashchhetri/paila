@@ -11,7 +11,10 @@ import {
   TrendingUp, 
   Layers,
   X,
-  Wallet
+  Wallet,
+  Plus,
+  PiggyBank,
+  AlertTriangle
 } from 'lucide-react';
 
 
@@ -29,6 +32,16 @@ export const Finance: React.FC = () => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  // Tab control state
+  const [activeTab, setActiveTab] = useState<'transactions' | 'budgets'>('transactions');
+
+  // Budget states
+  const [budgets, setBudgets] = useState<any[]>([]);
+  const [loadingBudgets, setLoadingBudgets] = useState(false);
+  const [budgetCategory, setBudgetCategory] = useState('Food');
+  const [budgetAmount, setBudgetAmount] = useState<number>(0);
+  const [savingBudget, setSavingBudget] = useState(false);
 
   // Forms active states
   const [formOpen, setFormOpen] = useState<'expense' | 'income' | null>(null);
@@ -131,13 +144,95 @@ export const Finance: React.FC = () => {
     }
   };
 
+  const fetchBudgets = async () => {
+    try {
+      if (!token) return;
+      setLoadingBudgets(true);
+      const res = await fetch('/api/finance/budgets', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setBudgets(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch budgets:', error);
+    } finally {
+      setLoadingBudgets(false);
+    }
+  };
+
+  const handleSaveBudget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (budgetAmount <= 0) {
+      showToast('Budget amount must be positive', 'warning');
+      return;
+    }
+
+    try {
+      setSavingBudget(true);
+      const res = await fetch('/api/finance/budgets', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          category: budgetCategory,
+          amount: budgetAmount
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Budget for ${budgetCategory} saved successfully!`, 'success');
+        setBudgetAmount(0);
+        fetchBudgets();
+      } else {
+        showToast(data.error || 'Failed to save budget', 'error');
+      }
+    } catch (e) {
+      showToast('Network error', 'error');
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+
+  const handleDeleteBudget = async (id: string, catName: string) => {
+    if (!confirm(`Are you sure you want to delete the budget for ${catName}?`)) return;
+
+    try {
+      const res = await fetch(`/api/finance/budgets/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Budget deleted successfully', 'success');
+        fetchBudgets();
+      } else {
+        showToast(data.error || 'Failed to delete budget', 'error');
+      }
+    } catch (e) {
+      showToast('Network error', 'error');
+    }
+  };
+
   useEffect(() => {
     fetchFinancials();
+    fetchBudgets();
   }, [token]);
 
   useEffect(() => {
     fetchTransactions();
   }, [token, search, filterType, filterWallet, page, sortBy]);
+
+  useEffect(() => {
+    if (activeTab === 'budgets') {
+      fetchBudgets();
+    }
+  }, [activeTab]);
 
   const handleSaveTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,6 +260,9 @@ export const Finance: React.FC = () => {
 
       if (res.ok) {
         showToast(`${formOpen === 'expense' ? 'Expense' : 'Income'} recorded successfully!`, 'success');
+        if (formOpen === 'expense' && data.warning) {
+          showToast(data.warning, 'warning');
+        }
         setFormOpen(null);
         // Reset fields
         setAmount(0);
@@ -173,6 +271,7 @@ export const Finance: React.FC = () => {
         // Refresh datasets
         fetchFinancials();
         fetchTransactions();
+        fetchBudgets();
       } else {
         showToast(data.error || 'Transaction failure', 'error');
       }
@@ -359,8 +458,34 @@ export const Finance: React.FC = () => {
         </div>
       </section>
 
-      {/* 3. Filter / Search / Export panel */}
-      <section className="bg-card border border-border p-4 rounded-2xl soft-shadow flex flex-col md:flex-row gap-4 justify-between items-center">
+      {/* Tab Switcher */}
+      <div className="flex gap-2 border-b border-border pb-1">
+        <button
+          onClick={() => setActiveTab('transactions')}
+          className={`pb-2 px-4 font-bold text-sm border-b-2 transition-all cursor-pointer ${
+            activeTab === 'transactions'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Transactions Ledger
+        </button>
+        <button
+          onClick={() => setActiveTab('budgets')}
+          className={`pb-2 px-4 font-bold text-sm border-b-2 transition-all cursor-pointer ${
+            activeTab === 'budgets'
+              ? 'border-accent text-accent'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Budget Planner
+        </button>
+      </div>
+
+      {activeTab === 'transactions' && (
+        <>
+          {/* 3. Filter / Search / Export panel */}
+          <section className="bg-card border border-border p-4 rounded-2xl soft-shadow flex flex-col md:flex-row gap-4 justify-between items-center">
         {/* Search */}
         <div className="relative w-full md:w-72">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -509,6 +634,144 @@ export const Finance: React.FC = () => {
           </button>
         </div>
       </section>
+        </>
+      )}
+
+      {activeTab === 'budgets' && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Create Budget Form */}
+          <div className="p-6 bg-card border border-border rounded-2xl soft-shadow flex flex-col gap-4 h-fit">
+            <div>
+              <h2 className="font-bold text-base md:text-lg flex items-center gap-1.5">
+                <PiggyBank className="h-5 w-5 text-accent animate-pulse" />
+                <span>Set Budget Limit</span>
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Define monthly targets for specific categories.</p>
+            </div>
+
+            <form onSubmit={handleSaveBudget} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Category</label>
+                <select
+                  value={budgetCategory}
+                  onChange={(e) => setBudgetCategory(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-muted/40 border border-border rounded-xl text-sm font-semibold focus:outline-none"
+                >
+                  <option value="Food">Food</option>
+                  <option value="Fuel">Fuel</option>
+                  <option value="Shopping">Shopping</option>
+                  <option value="Travel">Travel</option>
+                  <option value="Business">Business</option>
+                  <option value="Investment">Investment</option>
+                  <option value="Entertainment">Entertainment</option>
+                  <option value="Medical">Medical</option>
+                  <option value="Bills">Bills</option>
+                  <option value="Transport">Transport</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Monthly Limit (NPR)</label>
+                <input
+                  type="number"
+                  required
+                  value={budgetAmount === 0 ? '' : budgetAmount}
+                  onChange={(e) => setBudgetAmount(Number(e.target.value))}
+                  placeholder="Rs. 3,000"
+                  className="w-full px-3 py-2.5 bg-muted/40 border border-border rounded-xl text-sm font-semibold focus:outline-none"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingBudget}
+                className="w-full py-2.5 bg-primary text-primary-foreground font-semibold rounded-xl text-sm hover:opacity-90 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm disabled:opacity-50"
+              >
+                <Plus className="h-4.5 w-4.5" />
+                <span>{savingBudget ? 'Saving...' : 'Set Budget'}</span>
+              </button>
+            </form>
+          </div>
+
+          {/* Budgets Grid */}
+          <div className="lg:col-span-2 p-6 bg-card border border-border rounded-2xl soft-shadow flex flex-col gap-4">
+            <div>
+              <h2 className="font-bold text-base md:text-lg">Category Budgets</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Monitor utilization against monthly limits.</p>
+            </div>
+
+            {loadingBudgets ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">Loading budgets...</div>
+            ) : budgets.length === 0 ? (
+              <div className="py-16 flex flex-col items-center justify-center gap-2 border border-dashed border-border rounded-xl bg-muted/20">
+                <PiggyBank className="h-10 w-10 text-muted-foreground opacity-40" />
+                <span className="text-xs font-semibold text-muted-foreground">No budgets set yet. Configure one to start tracking.</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {budgets.map((budget) => {
+                  const percent = budget.amount > 0 ? Math.round((budget.spent / budget.amount) * 100) : 0;
+                  const isOver = budget.spent > budget.amount;
+                  const barColor = isOver 
+                    ? 'bg-red-500' 
+                    : percent >= 80 
+                    ? 'bg-amber-500' 
+                    : 'bg-green-500';
+
+                  return (
+                    <div 
+                      key={budget.id}
+                      className="p-4 bg-muted/20 border border-border/50 rounded-xl hover:border-border transition-all flex flex-col gap-3 relative group"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-sm text-foreground">{budget.category}</h3>
+                          <p className="text-[10px] text-muted-foreground font-semibold mt-0.5 uppercase tracking-wider">
+                            Rs. {budget.spent.toLocaleString()} / Rs. {budget.amount.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {isOver && (
+                            <span className="flex items-center gap-0.5 bg-red-500/10 text-red-500 font-extrabold text-[8px] uppercase tracking-wider px-1.5 py-0.5 rounded-full border border-red-500/15">
+                              <AlertTriangle className="h-2 w-2" />
+                              <span>Over Limit</span>
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleDeleteBudget(budget.id, budget.category)}
+                            className="p-1 rounded text-muted-foreground hover:text-red-500 hover:bg-muted cursor-pointer transition-colors md:opacity-0 group-hover:opacity-100"
+                            title="Delete Budget"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar Container */}
+                      <div className="w-full bg-border rounded-full h-2 overflow-hidden">
+                        <div 
+                          className={`h-full ${barColor} transition-all duration-500`}
+                          style={{ width: `${Math.min(100, percent)}%` }}
+                        />
+                      </div>
+
+                      <div className="flex justify-between text-[10px] font-bold uppercase tracking-wider">
+                        <span className={isOver ? 'text-red-500 font-extrabold' : 'text-muted-foreground'}>
+                          {percent}% Used
+                        </span>
+                        <span className="text-muted-foreground/60">
+                          {isOver ? 'Exceeded' : `Rs. ${(budget.amount - budget.spent).toLocaleString()} left`}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Add Transaction Inline Modal */}
       <AnimatePresence>
@@ -582,6 +845,7 @@ export const Finance: React.FC = () => {
                         <option value="Entertainment">Entertainment</option>
                         <option value="Medical">Medical</option>
                         <option value="Bills">Bills</option>
+                        <option value="Transport">Transport</option>
                         <option value="Other">Other</option>
                       </select>
                     ) : (

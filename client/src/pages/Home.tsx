@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { NepaliDate } from '@zener/nepali-datepicker-react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext.js';
@@ -13,7 +14,8 @@ import {
   TrendingUp,
   X,
   Sparkles,
-  ClipboardList
+  ClipboardList,
+  Clock
 } from 'lucide-react';
 
 interface QuickActionModalProps {
@@ -26,6 +28,16 @@ export const Home: React.FC = () => {
   const { user, token } = useAuth();
   const { showToast } = useNotification();
 
+  // Current time for live clock and Nepali date/time display
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // update every minute
+    return () => clearInterval(timer);
+  }, []);
+
 
   // Balance & Stats states
   const [balances, setBalances] = useState({ cash: 0, bank: 0, esewa: 0, total: 0 });
@@ -33,7 +45,51 @@ export const Home: React.FC = () => {
   const [productivity, setProductivity] = useState({ rate: 0, total: 0, completed: 0 });
   const [todayTasks, setTodayTasks] = useState<any[]>([]);
   const [tomorrowTasks, setTomorrowTasks] = useState<any[]>([]);
+  const [routines, setRoutines] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
+
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const currentDayName = daysOfWeek[currentTime.getDay()];
+
+  const parseRoutineItem = (itemString: string): { time: string; activity: string } => {
+    if (itemString.includes('|')) {
+      const parts = itemString.split('|');
+      return {
+        time: parts[0].trim(),
+        activity: parts.slice(1).join('|').trim()
+      };
+    }
+    const match = itemString.match(/^(?:\s*-\s*)?(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?(?:\s*[-–—]\s*\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)?)\s*(?:[:|]|\s+[-–—]\s+)\s*(.*)$/i);
+    if (match) {
+      return {
+        time: match[1].trim(),
+        activity: match[2].trim()
+      };
+    }
+    return {
+      time: '',
+      activity: itemString.trim()
+    };
+  };
+
+  const parseTimeTextToMinutes = (timeStr: string): number => {
+    if (!timeStr) return 9999;
+    const firstTime = timeStr.split(/[-–—]/)[0].trim();
+    const match = firstTime.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
+    if (!match) return 9999;
+    
+    let hours = parseInt(match[1]);
+    const minutes = match[2] ? parseInt(match[2]) : 0;
+    const ampm = match[3] ? match[3].toUpperCase() : '';
+    
+    if (ampm === 'PM' && hours < 12) {
+      hours += 12;
+    } else if (ampm === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    
+    return hours * 60 + minutes;
+  };
 
   // Quick Action Modal states
   const [activeModal, setActiveModal] = useState<'task' | 'expense' | 'income' | 'loan' | null>(null);
@@ -43,19 +99,23 @@ export const Home: React.FC = () => {
     try {
       if (!token) return;
 
-      const [walletsRes, reportsRes, todosRes] = await Promise.all([
+      const [walletsRes, reportsRes, todosRes, routinesRes] = await Promise.all([
         fetch('/api/wallets', { headers: { 'Authorization': `Bearer ${token}` } }),
         fetch('/api/reports/summary', { headers: { 'Authorization': `Bearer ${token}` } }),
         // Fetch today's tasks
-        fetch('/api/todos?status=Pending', { headers: { 'Authorization': `Bearer ${token}` } })
+        fetch('/api/todos?status=Pending', { headers: { 'Authorization': `Bearer ${token}` } }),
+        // Fetch routines
+        fetch('/api/routines', { headers: { 'Authorization': `Bearer ${token}` } })
       ]);
 
-      if (walletsRes.ok && reportsRes.ok && todosRes.ok) {
+      if (walletsRes.ok && reportsRes.ok && todosRes.ok && routinesRes.ok) {
         const walletsData = await walletsRes.json();
         const reportsData = await reportsRes.json();
         const todosData = await todosRes.json();
+        const routinesData = await routinesRes.json();
 
         setBalances(walletsData.summary);
+        setRoutines(routinesData);
         
         // Calculate today's income & expenses from history (or fetch dedicated)
         // Here we query transactions to calculate today's summary
@@ -137,13 +197,70 @@ export const Home: React.FC = () => {
     return '🌙';
   };
 
+  const convertToNepaliDigits = (num: number | string): string => {
+    const nepaliDigits = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
+    return num
+      .toString()
+      .split('')
+      .map(digit => (digit >= '0' && digit <= '9' ? nepaliDigits[parseInt(digit)] : digit))
+      .join('');
+  };
+
   const formatDate = () => {
-    return new Date().toLocaleDateString('en-US', {
+    return currentTime.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
+  };
+
+  const formatTime = () => {
+    return currentTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  const formatNepaliDate = () => {
+    try {
+      const nepaliDate = new NepaliDate(currentTime);
+      const nepaliMonths = [
+        'वैशाख', 'जेठ', 'असार', 'साउन', 'भदौ', 'असोज', 
+        'कात्तिक', 'मंसिर', 'पुस', 'माघ', 'फागुन', 'चैत'
+      ];
+      const nepaliDays = [
+        'आइतबार', 'सोमबार', 'मंगलबार', 'बुधबार', 'बिहीबार', 'शुक्रबार', 'शनिबार'
+      ];
+      
+      const year = convertToNepaliDigits(nepaliDate.getFullYear());
+      const month = nepaliMonths[nepaliDate.getMonth()];
+      const day = convertToNepaliDigits(nepaliDate.getDate());
+      const dayOfWeek = nepaliDays[currentTime.getDay()];
+      
+      return `${dayOfWeek}, ${month} ${day}, ${year} BS`;
+    } catch (e) {
+      console.error("Error formatting Nepali Date:", e);
+      return "";
+    }
+  };
+
+  const formatNepaliTime = () => {
+    try {
+      const hours = currentTime.getHours();
+      const minutes = currentTime.getMinutes();
+      const ampm = hours >= 12 ? 'अपराह्न' : 'पूर्वाह्न';
+      const displayHours = hours % 12 || 12;
+      const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
+      
+      const nepaliHours = convertToNepaliDigits(displayHours);
+      const nepaliMinutes = convertToNepaliDigits(formattedMinutes);
+      
+      return `${ampm} ${nepaliHours}:${nepaliMinutes} बजे`;
+    } catch (e) {
+      return "";
+    }
   };
 
   const handleToggleTask = async (todoId: string, currentStatus: string) => {
@@ -205,9 +322,16 @@ export const Home: React.FC = () => {
             <span>{getGreeting()}, {user?.profile.name.split(' ')[0]}</span>
             <span className="animate-pulse">{getGreetingIcon()}</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5 font-medium">
+          <p className="text-sm text-muted-foreground mt-1 flex items-center flex-wrap gap-1.5 font-medium">
             <Calendar className="h-4 w-4 text-accent" />
             <span>{formatDate()}</span>
+            <span className="text-muted-foreground/30">•</span>
+            <span>{formatTime()}</span>
+            <span className="text-muted-foreground/30">•</span>
+            <span className="text-accent font-semibold flex items-center gap-1">
+              <span>{formatNepaliDate()}</span>
+              <span className="text-xs text-accent/80 font-normal">({formatNepaliTime()})</span>
+            </span>
           </p>
         </div>
 
@@ -503,6 +627,104 @@ export const Home: React.FC = () => {
 
       </section>
 
+      {/* 5. Today's Routine Section */}
+      <section className="p-5 bg-card border border-border rounded-2xl soft-shadow flex flex-col gap-4">
+        <div className="flex justify-between items-center border-b border-border/50 pb-3">
+          <div className="flex items-center gap-2">
+            <Clock className="h-5 w-5 text-accent animate-pulse" />
+            <h2 className="font-bold text-base md:text-lg leading-none">Today's Routine ({currentDayName})</h2>
+          </div>
+          <Link to="/todo" className="text-xs text-accent font-semibold hover:underline">
+            Manage Routine
+          </Link>
+        </div>
+
+        <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1">
+          {(() => {
+            const rawItems = routines[currentDayName] || [];
+            if (rawItems.length === 0) {
+              return (
+                <div className="py-8 text-center text-sm text-muted-foreground flex flex-col items-center justify-center gap-2">
+                  <ClipboardList className="h-7 w-7 text-muted-foreground/30" />
+                  <span>No routine activities scheduled for {currentDayName}.</span>
+                  <Link
+                    to="/todo"
+                    className="text-xs font-semibold text-accent hover:underline"
+                  >
+                    Click here to configure your routine!
+                  </Link>
+                </div>
+              );
+            }
+
+            // Parse and sort items chronologically
+            const parsedItems = rawItems.map((item, idx) => {
+              const parsed = parseRoutineItem(item);
+              const minutes = parseTimeTextToMinutes(parsed.time);
+              return {
+                ...parsed,
+                minutes,
+                index: idx,
+                original: item
+              };
+            }).sort((a, b) => a.minutes - b.minutes);
+
+            const nowMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+            
+            // Find active index (last item where start time is <= current time)
+            let activeIndex = -1;
+            for (let i = 0; i < parsedItems.length; i++) {
+              if (parsedItems[i].minutes <= nowMinutes) {
+                activeIndex = i;
+              }
+            }
+
+            return (
+              <div className="flex flex-col divide-y divide-border/20">
+                {parsedItems.map((item) => {
+                  const isPast = activeIndex !== -1 && item.index < activeIndex;
+                  const isCurrent = activeIndex !== -1 && item.index === activeIndex;
+
+                  return (
+                    <div 
+                      key={item.index} 
+                      className={`flex items-center justify-between py-3 text-sm transition-colors rounded-lg px-3 -mx-3 ${
+                        isCurrent ? 'bg-accent/10 border-l-4 border-accent' : ''
+                      }`}
+                    >
+                      <div className="flex items-start gap-4 flex-grow min-w-0 pr-2">
+                        <span className={`w-[120px] font-bold shrink-0 ${
+                          isPast ? 'text-muted-foreground/40' : isCurrent ? 'text-accent font-extrabold' : 'text-foreground/95'
+                        }`}>
+                          {item.time || '—'}
+                        </span>
+                        <span className={`truncate flex-grow ${
+                          isPast ? 'text-muted-foreground/50 line-through' : isCurrent ? 'text-foreground font-semibold' : 'text-foreground/80'
+                        }`}>
+                          {item.activity}
+                        </span>
+                      </div>
+                      
+                      {isCurrent && (
+                        <span className="flex items-center gap-1.5 bg-accent/15 text-accent font-bold px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider shrink-0 select-none">
+                          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse block" />
+                          <span>Now</span>
+                        </span>
+                      )}
+                      {isPast && (
+                        <span className="text-[11px] text-muted-foreground/30 font-semibold uppercase tracking-wider shrink-0 select-none">
+                          Done
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      </section>
+
       {/* Action Modals */}
       <AnimatePresence>
         {activeModal && (
@@ -612,6 +834,9 @@ const QuickActionModal: React.FC<QuickActionModalProps> = ({ type, onClose, onSu
 
       if (res.ok) {
         showToast(`${type === 'expense' ? 'Expense' : 'Income'} recorded successfully!`, 'success');
+        if (type === 'expense' && data.warning) {
+          showToast(data.warning, 'warning');
+        }
         onSuccess();
       } else {
         showToast(data.error || 'Operation failed', 'error');
@@ -817,6 +1042,7 @@ const QuickActionModal: React.FC<QuickActionModalProps> = ({ type, onClose, onSu
                     <option value="Entertainment">Entertainment</option>
                     <option value="Medical">Medical</option>
                     <option value="Bills">Bills</option>
+                    <option value="Transport">Transport</option>
                     <option value="Other">Other</option>
                   </select>
                 ) : (

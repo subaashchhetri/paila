@@ -50,6 +50,171 @@ export const Todo: React.FC = () => {
   const [routines, setRoutines] = useState<Record<string, string[]>>({});
   const [editingRoutines, setEditingRoutines] = useState(false);
   const [routinesText, setRoutinesText] = useState('');
+  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const currentDayName = daysOfWeek[new Date().getDay()];
+  const [selectedRoutineDay, setSelectedRoutineDay] = useState<string>(currentDayName);
+
+  // New Routine inputs
+  const [newRoutineTime, setNewRoutineTime] = useState('');
+  const [newRoutineActivity, setNewRoutineActivity] = useState('');
+  const [syncAsTodo, setSyncAsTodo] = useState(true);
+
+  const getNextDateForDay = (dayName: string): Date => {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayIndex = days.indexOf(dayName);
+    if (dayIndex === -1) return new Date();
+    
+    const resultDate = new Date();
+    const currentDayIndex = resultDate.getDay();
+    
+    let daysToAdd = dayIndex - currentDayIndex;
+    if (daysToAdd <= 0) {
+      daysToAdd += 7; // schedule for next week if it's today or has passed
+    }
+    
+    resultDate.setDate(resultDate.getDate() + daysToAdd);
+    return resultDate;
+  };
+
+  const handleAddRoutineItem = async () => {
+    if (!newRoutineActivity.trim()) return;
+    
+    const formattedItem = newRoutineTime.trim()
+      ? `${newRoutineTime.trim()} | ${newRoutineActivity.trim()}`
+      : newRoutineActivity.trim();
+      
+    const currentDayItems = routines[selectedRoutineDay] || [];
+    const updatedItems = [...currentDayItems, formattedItem];
+    const updatedRoutines = {
+      ...routines,
+      [selectedRoutineDay]: updatedItems
+    };
+
+    try {
+      const res = await fetch('/api/routines', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updatedRoutines)
+      });
+
+      if (!res.ok) {
+        showToast('Failed to add routine activity', 'error');
+        return;
+      }
+
+      setRoutines(updatedRoutines);
+      setRoutinesText(serializeRoutines(updatedRoutines));
+      setNewRoutineTime('');
+      setNewRoutineActivity('');
+
+      if (syncAsTodo) {
+        const nextDate = getNextDateForDay(selectedRoutineDay);
+        
+        let autoCategory = 'Personal';
+        const activityLower = newRoutineActivity.toLowerCase();
+        if (activityLower.includes('study') || activityLower.includes('college') || activityLower.includes('read') || activityLower.includes('learn') || activityLower.includes('course') || activityLower.includes('class')) {
+          autoCategory = 'Study';
+        } else if (activityLower.includes('gym') || activityLower.includes('workout') || activityLower.includes('cardio') || activityLower.includes('stretch') || activityLower.includes('walk') || activityLower.includes('health') || activityLower.includes('run') || activityLower.includes('exercise') || activityLower.includes('sports')) {
+          autoCategory = 'Health';
+        } else if (activityLower.includes('office') || activityLower.includes('work') || activityLower.includes('client') || activityLower.includes('meeting') || activityLower.includes('trendmarg')) {
+          autoCategory = 'Work';
+        } else if (activityLower.includes('finance') || activityLower.includes('bank') || activityLower.includes('esewa') || activityLower.includes('expense') || activityLower.includes('bill') || activityLower.includes('salary') || activityLower.includes('tax') || activityLower.includes('loan')) {
+          autoCategory = 'Finance';
+        } else if (activityLower.includes('business') || activityLower.includes('sales') || activityLower.includes('shop') || activityLower.includes('marketing')) {
+          autoCategory = 'Business';
+        }
+
+        const todoTitle = newRoutineTime.trim()
+          ? `${newRoutineTime.trim()} - ${newRoutineActivity.trim()}`
+          : newRoutineActivity.trim();
+
+        const todoPayload = {
+          title: todoTitle,
+          description: `Automatically created from ${selectedRoutineDay} Weekly Routine`,
+          priority: 'Medium',
+          category: autoCategory,
+          deadline: nextDate.toISOString(),
+          repeat: 'Weekly',
+          reminder: false,
+          notes: `Created from routine activity for ${selectedRoutineDay}`
+        };
+
+        const todoRes = await fetch('/api/todos', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(todoPayload)
+        });
+
+        if (todoRes.ok) {
+          showToast('Added to Weekly Routine and Tasks list!', 'success');
+          fetchTodos();
+        } else {
+          showToast('Added to Routine, but failed to create Task', 'warning');
+        }
+      } else {
+        showToast('Added to Weekly Routine!', 'success');
+      }
+    } catch (error) {
+      showToast('Error saving routine activity', 'error');
+    }
+  };
+
+  const handleDeleteRoutineItem = async (indexToDelete: number) => {
+    const currentDayItems = routines[selectedRoutineDay] || [];
+    const updatedItems = currentDayItems.filter((_, idx) => idx !== indexToDelete);
+    const updatedRoutines = {
+      ...routines,
+      [selectedRoutineDay]: updatedItems
+    };
+
+    try {
+      const res = await fetch('/api/routines', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updatedRoutines)
+      });
+
+      if (res.ok) {
+        showToast('Activity removed from routine', 'success');
+        setRoutines(updatedRoutines);
+        setRoutinesText(serializeRoutines(updatedRoutines));
+      } else {
+        showToast('Failed to delete routine activity', 'error');
+      }
+    } catch (error) {
+      showToast('Error deleting routine activity', 'error');
+    }
+  };
+
+  const parseRoutineItem = (itemString: string): { time: string; activity: string } => {
+    if (itemString.includes('|')) {
+      const parts = itemString.split('|');
+      return {
+        time: parts[0].trim(),
+        activity: parts.slice(1).join('|').trim()
+      };
+    }
+    const match = itemString.match(/^(?:\s*-\s*)?(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?(?:\s*[-–—]\s*\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)?)\s*(?:[:|]|\s+[-–—]\s+)\s*(.*)$/i);
+    if (match) {
+      return {
+        time: match[1].trim(),
+        activity: match[2].trim()
+      };
+    }
+    return {
+      time: '',
+      activity: itemString.trim()
+    };
+  };
 
   const serializeRoutines = (r: Record<string, string[]>) => {
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -703,41 +868,184 @@ export const Todo: React.FC = () => {
                     <span className="w-3 h-3 rounded-full bg-yellow-500/80 block" />
                     <span className="w-3 h-3 rounded-full bg-green-500/80 block" />
                   </div>
-                  {/* Active tab */}
-                  <div className="flex items-center gap-1.5 px-3 py-1 bg-card border border-border border-b-transparent rounded-t-lg text-xs font-semibold text-foreground -mb-[13px] relative z-10">
-                    <Folder className="h-3.5 w-3.5 text-accent" />
-                    <span>weekly_routine.txt</span>
+                  {/* Tabs */}
+                  <div className="flex gap-1 -mb-[13px] relative z-10 select-none">
+                    <button
+                      onClick={() => setEditingRoutines(true)}
+                      className={`flex items-center gap-1.5 px-3 py-1 border border-border border-b-transparent rounded-t-lg text-xs font-semibold cursor-pointer transition-all ${
+                        editingRoutines 
+                          ? 'bg-card text-foreground' 
+                          : 'bg-muted/40 text-muted-foreground hover:bg-muted/80'
+                      }`}
+                    >
+                      <Folder className="h-3.5 w-3.5 text-accent" />
+                      <span>weekly_routine.txt</span>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (editingRoutines) {
+                          await handleSaveRoutines();
+                        } else {
+                          setEditingRoutines(false);
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1 border border-border border-b-transparent rounded-t-lg text-xs font-semibold cursor-pointer transition-all ${
+                        !editingRoutines 
+                          ? 'bg-card text-foreground' 
+                          : 'bg-muted/40 text-muted-foreground hover:bg-muted/80'
+                      }`}
+                    >
+                      <BookOpen className="h-3.5 w-3.5 text-accent" />
+                      <span>Preview</span>
+                    </button>
                   </div>
                 </div>
                 <div className="text-[10px] text-muted-foreground font-mono">
-                  UTF-8 • Plain Text
+                  {editingRoutines ? 'UTF-8 • Plain Text' : 'Rendered Weekly Schedule'}
                 </div>
               </div>
 
               {/* Editor Workspace */}
-              <div className="flex font-mono text-xs overflow-hidden h-[450px]">
-                {/* Line numbers gutter */}
-                <div className="w-12 border-r border-border bg-muted/20 text-muted-foreground/40 text-right py-4 pr-3 flex flex-col gap-[4px] select-none text-[11px] leading-[18px]">
-                  {Array.from({ length: Math.max(22, routinesText.split('\n').length) }, (_, i) => i + 1).map(n => (
-                    <div key={n}>{n}</div>
-                  ))}
-                </div>
+              <div className="flex flex-col overflow-hidden h-[480px]">
+                {editingRoutines ? (
+                  <div className="flex font-mono text-xs overflow-hidden h-full">
+                    {/* Line numbers gutter */}
+                    <div className="w-12 border-r border-border bg-muted/20 text-muted-foreground/40 text-right py-4 pr-3 flex flex-col gap-[4px] select-none text-[11px] leading-[18px]">
+                      {Array.from({ length: Math.max(22, routinesText.split('\n').length) }, (_, i) => i + 1).map(n => (
+                        <div key={n}>{n}</div>
+                      ))}
+                    </div>
 
-                {/* Content body */}
-                <div className="flex-grow relative h-full bg-card/50">
-                  {editingRoutines ? (
-                    <textarea
-                      value={routinesText}
-                      onChange={(e) => setRoutinesText(e.target.value)}
-                      className="w-full h-full p-4 bg-transparent text-foreground focus:outline-none resize-none font-mono text-[12px] leading-[18px] focus:ring-0 focus:border-none"
-                      placeholder="Monday:\n- Gym\n- Study\n\nTuesday:\n- Work\n..."
-                    />
-                  ) : (
-                    <pre className="w-full h-full p-4 overflow-auto font-mono text-[12px] leading-[18px] text-foreground bg-transparent whitespace-pre-wrap select-text">
-                      {routinesText || 'Monday:\n- Rest Day\n\nTuesday:\n- Rest Day\n\nWednesday:\n- Rest Day\n\nThursday:\n- Rest Day\n\nFriday:\n- Rest Day\n\nSaturday:\n- Rest Day\n\nSunday:\n- Rest Day'}
-                    </pre>
-                  )}
-                </div>
+                    {/* Content body */}
+                    <div className="flex-grow relative h-full bg-card/50">
+                      <textarea
+                        value={routinesText}
+                        onChange={(e) => setRoutinesText(e.target.value)}
+                        className="w-full h-full p-4 bg-transparent text-foreground focus:outline-none resize-none font-mono text-[12px] leading-[18px] focus:ring-0 focus:border-none"
+                        placeholder="Monday:\n- 5:00 AM | Wake up, drink water\n- 6:00 AM – 11:00 AM | College / Study\n\nTuesday:\n- 8:00 AM | Breakfast\n..."
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-grow p-5 bg-card/50 overflow-y-auto flex flex-col">
+                    {/* Day Selection Tabs */}
+                    <div className="flex flex-wrap gap-1 mb-4 border-b border-border pb-2 shrink-0">
+                      {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => {
+                        const isSelected = selectedRoutineDay === day;
+                        const isToday = day === currentDayName;
+                        return (
+                          <button
+                            key={day}
+                            onClick={() => setSelectedRoutineDay(day)}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg cursor-pointer transition-all relative ${
+                              isSelected
+                                ? 'bg-accent text-accent-foreground shadow-sm'
+                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                            }`}
+                          >
+                            {day}
+                            {isToday && (
+                              <span className={`absolute top-0 right-0 w-1.5 h-1.5 rounded-full bg-accent ${isSelected ? 'bg-accent-foreground' : 'animate-pulse'}`} />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Add Activity Form */}
+                    <div className="flex flex-col gap-3 p-4 bg-muted/15 border border-border rounded-2xl mb-4 shrink-0">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={newRoutineTime}
+                          onChange={(e) => setNewRoutineTime(e.target.value)}
+                          placeholder="Time (e.g., 5:00 AM)"
+                          className="w-1/3 px-3.5 py-2 bg-card border border-border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+                        />
+                        <input
+                          type="text"
+                          value={newRoutineActivity}
+                          onChange={(e) => setNewRoutineActivity(e.target.value)}
+                          placeholder="Activity (e.g., Gym, Study, Client Work)"
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddRoutineItem()}
+                          className="flex-grow px-3.5 py-2 bg-card border border-border rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-accent/50"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground select-none cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={syncAsTodo}
+                            onChange={(e) => setSyncAsTodo(e.target.checked)}
+                            className="rounded border-border bg-card text-accent focus:ring-accent w-4 h-4 cursor-pointer"
+                          />
+                          <span>Create a weekly recurring task in Tasks List (Todo)</span>
+                        </label>
+                        <button
+                          onClick={handleAddRoutineItem}
+                          className="px-3.5 py-1.5 bg-accent text-accent-foreground font-semibold rounded-xl text-xs cursor-pointer hover:opacity-90 active:scale-[0.98] transition-all flex items-center gap-1.5 shrink-0"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Add to Routine</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Table View */}
+                    <div className="flex-grow overflow-y-auto pr-1">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="border-b border-border/60">
+                            <th className="py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider w-[180px] pr-4">Time</th>
+                            <th className="py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Activity</th>
+                            <th className="py-2.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider text-right w-[60px]">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/30">
+                          {(() => {
+                            const items = routines[selectedRoutineDay] || [];
+                            if (items.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={3} className="py-12 text-center text-sm text-muted-foreground">
+                                    <div className="flex flex-col items-center justify-center gap-2">
+                                      <Clock className="h-8 w-8 text-muted-foreground/30" />
+                                      <span>No routine items set for {selectedRoutineDay}.</span>
+                                      <span className="text-xs text-muted-foreground/60">Use the form above to add some activities!</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            return items.map((item, idx) => {
+                              const parsed = parseRoutineItem(item);
+                              return (
+                                <tr key={idx} className="hover:bg-muted/10 group transition-colors">
+                                  <td className="py-3.5 pr-6 font-bold text-sm text-foreground whitespace-nowrap align-top w-[180px] leading-tight">
+                                    {parsed.time || <span className="text-muted-foreground/20 font-normal italic">—</span>}
+                                  </td>
+                                  <td className="py-3.5 text-sm text-foreground/80 font-normal leading-relaxed align-top">
+                                    {parsed.activity}
+                                  </td>
+                                  <td className="py-3.5 align-top text-right">
+                                    <button
+                                      onClick={() => handleDeleteRoutineItem(idx)}
+                                      className="text-muted-foreground hover:text-red-500 cursor-pointer p-1 rounded-lg hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
+                                      title="Delete activity"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>

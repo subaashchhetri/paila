@@ -33,6 +33,7 @@ interface UserProfile {
 
 interface User {
   id: string;
+  username: string;
   email: string;
   createdAt: string;
   profile?: UserProfile | null;
@@ -186,6 +187,7 @@ export const Admin: React.FC = () => {
 
   const filteredUsers = users.filter(user => {
     const name = user.profile?.name || '';
+    const username = user.username || '';
     const email = user.email || '';
     const phone = user.profile?.phone || '';
     const address = user.profile?.address || '';
@@ -194,6 +196,7 @@ export const Admin: React.FC = () => {
     
     return (
       name.toLowerCase().includes(q) ||
+      username.toLowerCase().includes(q) ||
       email.toLowerCase().includes(q) ||
       phone.toLowerCase().includes(q) ||
       address.toLowerCase().includes(q) ||
@@ -386,7 +389,7 @@ export const Admin: React.FC = () => {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search by name, email, address..."
+                placeholder="Search by name, username, address..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
@@ -427,7 +430,7 @@ export const Admin: React.FC = () => {
                   {filteredUsers.map((user) => {
                     const initials = user.profile?.name
                       ? user.profile.name.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
-                      : user.email.substring(0, 2).toUpperCase();
+                      : user.username.substring(0, 2).toUpperCase();
 
                     return (
                       <tr 
@@ -455,7 +458,11 @@ export const Admin: React.FC = () => {
                               <span className="font-semibold text-foreground group-hover:text-accent transition-colors leading-tight">
                                 {user.profile?.name || 'Anonymous User'}
                               </span>
-                              <span className="text-xs text-muted-foreground mt-0.5">{user.email}</span>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5 select-none">
+                                <span className="font-semibold text-[10px] px-1 py-0.5 rounded bg-muted border border-border">@{user.username}</span>
+                                <span>•</span>
+                                <span>{user.email}</span>
+                              </div>
                             </div>
                           </div>
                         </td>

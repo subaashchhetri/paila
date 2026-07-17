@@ -38,25 +38,93 @@ export const Onboarding: React.FC = () => {
 
   // Step 3: Weekly Routines
   const [routines, setRoutines] = useState<Record<string, string[]>>({
-    Monday: ['Gym', 'Office', 'Study'],
-    Tuesday: ['Gym', 'Office', 'Reading'],
-    Wednesday: ['Office', 'Study'],
-    Thursday: ['Gym', 'Office', 'Reading'],
-    Friday: ['Office', 'Study', 'Movie Night'],
-    Saturday: ['Grocery Shopping', 'Cleaning'],
-    Sunday: ['Planning Week', 'Family Visit']
+    Monday: [
+      '5:00 AM | Wake up, drink water, freshen up, stretch',
+      '6:00 AM – 11:00 AM | College / Study',
+      '8:00 AM | Breakfast',
+      '12:00 PM – 5:00 PM | Office / Client Work',
+      '5:30 PM – 7:00 PM | Gym (Strength + Cardio)',
+      '10:30 PM | Sleep'
+    ],
+    Tuesday: [
+      '5:00 AM | Wake up, drink water, freshen up, stretch',
+      '6:00 AM – 11:00 AM | College / Study',
+      '8:00 AM | Breakfast',
+      '12:00 PM – 5:00 PM | Office / Client Work',
+      '5:30 PM – 7:00 PM | Gym (Strength + Cardio)',
+      '10:30 PM | Sleep'
+    ],
+    Wednesday: [
+      '5:00 AM | Wake up, drink water, freshen up, stretch',
+      '6:00 AM – 11:00 AM | College / Study',
+      '8:00 AM | Breakfast',
+      '12:00 PM – 5:00 PM | Office / Client Work',
+      '10:30 PM | Sleep'
+    ],
+    Thursday: [
+      '5:00 AM | Wake up, drink water, freshen up, stretch',
+      '6:00 AM – 11:00 AM | College / Study',
+      '8:00 AM | Breakfast',
+      '12:00 PM – 5:00 PM | Office / Client Work',
+      '5:30 PM – 7:00 PM | Gym (Strength + Cardio)',
+      '10:30 PM | Sleep'
+    ],
+    Friday: [
+      '5:00 AM | Wake up, drink water, freshen up, stretch',
+      '6:00 AM – 11:00 AM | College / Study',
+      '8:00 AM | Breakfast',
+      '12:00 PM – 5:00 PM | Office / Client Work',
+      '10:30 PM | Sleep'
+    ],
+    Saturday: [
+      '8:00 AM | Wake up & Breakfast',
+      '10:00 AM – 1:00 PM | Grocery Shopping & Cleaning',
+      '6:00 PM – 9:00 PM | Movie Night / Rest'
+    ],
+    Sunday: [
+      '8:00 AM | Wake up & Breakfast',
+      '11:00 AM – 2:00 PM | Planning Week & Self-care',
+      '4:00 PM – 8:00 PM | Family Visit'
+    ]
   });
 
-  const [newRoutineItem, setNewRoutineItem] = useState('');
+  const [routineTime, setRoutineTime] = useState('');
+  const [routineActivity, setRoutineActivity] = useState('');
   const [selectedDay, setSelectedDay] = useState('Monday');
 
+  const parseRoutineItem = (itemString: string): { time: string; activity: string } => {
+    if (itemString.includes('|')) {
+      const parts = itemString.split('|');
+      return {
+        time: parts[0].trim(),
+        activity: parts.slice(1).join('|').trim()
+      };
+    }
+    const match = itemString.match(/^(?:\s*-\s*)?(\d{1,2}(?::\d{2})?\s*(?:AM|PM)?(?:\s*[-–—]\s*\d{1,2}(?::\d{2})?\s*(?:AM|PM)?)?)\s*(?:[:|]|\s+[-–—]\s+)\s*(.*)$/i);
+    if (match) {
+      return {
+        time: match[1].trim(),
+        activity: match[2].trim()
+      };
+    }
+    return {
+      time: '',
+      activity: itemString.trim()
+    };
+  };
+
   const addRoutineItem = () => {
-    if (!newRoutineItem.trim()) return;
+    if (!routineActivity.trim()) return;
+    const formattedItem = routineTime.trim()
+      ? `${routineTime.trim()} | ${routineActivity.trim()}`
+      : routineActivity.trim();
+
     setRoutines(prev => ({
       ...prev,
-      [selectedDay]: [...prev[selectedDay], newRoutineItem.trim()]
+      [selectedDay]: [...prev[selectedDay], formattedItem]
     }));
-    setNewRoutineItem('');
+    setRoutineTime('');
+    setRoutineActivity('');
   };
 
   const removeRoutineItem = (day: string, index: number) => {
@@ -301,15 +369,22 @@ export const Onboarding: React.FC = () => {
               <div className="flex gap-2">
                 <input
                   type="text"
-                  value={newRoutineItem}
-                  onChange={(e) => setNewRoutineItem(e.target.value)}
-                  placeholder={`Add item to ${selectedDay}... (e.g. Gym, Read, Study)`}
+                  value={routineTime}
+                  onChange={(e) => setRoutineTime(e.target.value)}
+                  placeholder="Time (e.g., 5:00 AM)"
+                  className="w-1/3 px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+                />
+                <input
+                  type="text"
+                  value={routineActivity}
+                  onChange={(e) => setRoutineActivity(e.target.value)}
+                  placeholder="Activity (e.g., Wake up)"
                   onKeyDown={(e) => e.key === 'Enter' && addRoutineItem()}
                   className="flex-grow px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
                 />
                 <button
                   onClick={addRoutineItem}
-                  className="px-3.5 py-2 bg-accent text-accent-foreground font-semibold rounded-xl text-sm cursor-pointer hover:opacity-90 active:scale-[0.98] transition-all flex items-center gap-1.5"
+                  className="px-3.5 py-2 bg-accent text-accent-foreground font-semibold rounded-xl text-sm cursor-pointer hover:opacity-90 active:scale-[0.98] transition-all flex items-center gap-1.5 shrink-0"
                 >
                   <Plus className="h-4 w-4" />
                   <span>Add</span>
@@ -317,24 +392,34 @@ export const Onboarding: React.FC = () => {
               </div>
 
               {/* Items List */}
-              <div className="flex flex-wrap gap-2 p-4 bg-muted/20 border border-border border-dashed rounded-2xl min-h-[100px]">
+              <div className="flex flex-col gap-2 p-4 bg-muted/10 border border-border rounded-2xl min-h-[150px] max-h-[300px] overflow-y-auto">
                 {routines[selectedDay].length === 0 ? (
                   <span className="text-xs text-muted-foreground m-auto">No routine items set for {selectedDay}.</span>
                 ) : (
-                  routines[selectedDay].map((item, idx) => (
-                    <div 
-                      key={idx}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-card border border-border rounded-xl text-xs font-semibold soft-shadow"
-                    >
-                      <span>{item}</span>
-                      <button 
-                        onClick={() => removeRoutineItem(selectedDay, idx)}
-                        className="text-muted-foreground hover:text-red-500 cursor-pointer p-0.5 rounded-md hover:bg-muted"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))
+                  <div className="flex flex-col divide-y divide-border/40">
+                    {routines[selectedDay].map((item, idx) => {
+                      const parsed = parseRoutineItem(item);
+                      return (
+                        <div 
+                          key={idx}
+                          className="flex items-center justify-between py-2 text-xs"
+                        >
+                          <div className="flex items-start gap-4 flex-grow">
+                            <span className="font-bold text-foreground w-[120px] shrink-0">
+                              {parsed.time || <span className="text-muted-foreground/20 font-normal italic">—</span>}
+                            </span>
+                            <span className="text-muted-foreground font-normal leading-relaxed">{parsed.activity}</span>
+                          </div>
+                          <button 
+                            onClick={() => removeRoutineItem(selectedDay, idx)}
+                            className="text-muted-foreground hover:text-red-500 cursor-pointer p-1 rounded-md hover:bg-muted shrink-0 ml-2"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </motion.div>

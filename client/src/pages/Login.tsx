@@ -66,8 +66,8 @@ export const Login: React.FC = () => {
           <div className="flex gap-2.5 items-start p-3.5 mb-6 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-700 dark:text-indigo-300 text-xs leading-relaxed">
             <ShieldCheck className="h-5 w-5 text-indigo-500 flex-shrink-0 mt-0.5" />
             <div>
-              <span className="font-bold">Testing Phase Active</span>
-              <p className="opacity-90 mt-0.5">Developed by: subaashchhetri</p>
+              <span className="font-bold">Currently in Testing Phase. Please report any issues.</span>
+              <p className="opacity-90 mt-0.5">Developed by Subaash Chhetri.</p>
             </div>
           </div>
         )}

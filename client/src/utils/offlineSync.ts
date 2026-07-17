@@ -425,10 +425,13 @@ const updateCacheOptimistically = async (url: string, method: string, bodyObj: a
 const getAbsoluteUrl = (url: string): string => {
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const isCapacitor = window.location.protocol === 'capacitor:';
-  const isExternalHost = !isLocalhost && window.location.hostname !== 'paila-todo.onrender.com';
+  const isExternalHost = !isLocalhost && 
+    window.location.hostname !== 'paila-todo.onrender.com' && 
+    !window.location.hostname.includes('vercel.app');
   
   if ((isCapacitor || isExternalHost) && url.startsWith('/api')) {
-    return `https://paila-todo.onrender.com${url}`;
+    const baseUrl = import.meta.env.VITE_API_URL || 'https://paila-todo.onrender.com';
+    return `${baseUrl}${url}`;
   }
   return url;
 };

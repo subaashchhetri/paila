@@ -4,6 +4,7 @@
   "description": "Paila Todo - Personal Productivity and Finance Manager",
   "scripts": {
     "setup": "npm install --legacy-peer-deps && npm install --prefix client --legacy-peer-deps && npm install --prefix server --legacy-peer-deps && npm run prisma:setup --prefix server",
+    "postinstall": "npm install --prefix client --legacy-peer-deps && npm install --prefix server --legacy-peer-deps && npm run prisma:setup --prefix server",
     "dev": "npx concurrently -n \"client,server\" -c \"cyan.bold,green.bold\" \"npm run dev --prefix client\" \"npm run dev --prefix server\"",
     "build": "npm run build --prefix client && npm run build --prefix server",
     "start": "npm run start --prefix server"

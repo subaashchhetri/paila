@@ -8,12 +8,13 @@ const originalFetch = window.fetch;
 window.fetch = function (input, init) {
   if (typeof input === 'string' && input.startsWith('/api')) {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const isCapacitor = window.location.protocol === 'capacitor:';
     
-    // On native apps (Capacitor) or in production web, redirect relative /api calls to Render server
-    const isCapacitor = window.location.protocol === 'capacitor:' || window.location.protocol === 'http:' && !isLocalhost;
+    // Only redirect if running inside native mobile container (Capacitor) or on an external frontend host (like Vercel)
+    const isExternalHost = !isLocalhost && window.location.hostname !== 'paila-todo.onrender.com';
     
-    if (isCapacitor || !isLocalhost) {
-      const baseUrl = 'https://paila-1.onrender.com';
+    if (isCapacitor || isExternalHost) {
+      const baseUrl = 'https://paila-todo.onrender.com';
       input = `${baseUrl}${input}`;
     }
   }

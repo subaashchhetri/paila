@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { 
   Home as HomeIcon, 
@@ -9,16 +9,45 @@ import {
   User as UserIcon,
   LogOut,
   Sun,
-  Moon
+  Moon,
+  WifiOff,
+  RefreshCw
 } from 'lucide-react';
 
 import { useAuth } from '../context/AuthContext.js';
 import { useTheme } from '../context/ThemeContext.js';
+import { useNotification } from '../context/NotificationContext.js';
 
 export const Layout: React.FC = () => {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { showToast } = useNotification();
   const navigate = useNavigate();
+
+  const [connectionStatus, setConnectionStatus] = useState({
+    isOffline: !navigator.onLine,
+    isSyncing: false,
+    pendingCount: 0
+  });
+
+  useEffect(() => {
+    const handleStatusChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setConnectionStatus(detail);
+    };
+
+    const handleSyncSuccess = () => {
+      showToast('Offline data synced successfully!', 'success');
+    };
+
+    window.addEventListener('offline-status-change', handleStatusChange);
+    window.addEventListener('offline-sync-success', handleSyncSuccess);
+
+    return () => {
+      window.removeEventListener('offline-status-change', handleStatusChange);
+      window.removeEventListener('offline-sync-success', handleSyncSuccess);
+    };
+  }, [showToast]);
 
   const handleLogout = async () => {
     await logout();
@@ -50,7 +79,7 @@ export const Layout: React.FC = () => {
         </div>
 
         {/* User Mini Profile */}
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 mb-6 border border-border/50">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 mb-4 border border-border/50">
           <div className="h-10 w-10 rounded-xl bg-accent/15 border border-accent/20 flex items-center justify-center font-bold text-accent text-base uppercase">
             {user?.profile.name.charAt(0) || 'U'}
           </div>
@@ -59,6 +88,31 @@ export const Layout: React.FC = () => {
             <p className="text-xs text-muted-foreground truncate">{user?.profile.occupation || 'Member'}</p>
           </div>
         </div>
+
+        {/* Connectivity Status Indicator */}
+        {connectionStatus.isOffline ? (
+          <div className="mb-6 px-3.5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-between text-xs font-semibold animate-pulse">
+            <div className="flex items-center gap-2">
+              <WifiOff className="h-4 w-4" />
+              <span>Offline Mode</span>
+            </div>
+            {connectionStatus.pendingCount > 0 && (
+              <span className="bg-amber-500 text-amber-950 font-bold px-1.5 py-0.5 rounded-md text-[10px]">
+                {connectionStatus.pendingCount} pending
+              </span>
+            )}
+          </div>
+        ) : connectionStatus.isSyncing ? (
+          <div className="mb-6 px-3.5 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center gap-2 text-xs font-semibold">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            <span>Syncing {connectionStatus.pendingCount} change{connectionStatus.pendingCount !== 1 ? 's' : ''}...</span>
+          </div>
+        ) : (
+          <div className="mb-6 px-3.5 py-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-2 text-xs font-semibold">
+            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Connected & Backed up</span>
+          </div>
+        )}
 
         {/* Nav Links */}
         <nav className="flex-grow flex flex-col gap-1">
@@ -121,13 +175,28 @@ export const Layout: React.FC = () => {
             </div>
             <h1 className="font-bold text-lg">Paila Todo</h1>
           </div>
-          
-          <button 
-            onClick={toggleTheme} 
-            className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center border border-border"
-          >
-            {theme === 'light' ? <Moon className="h-4 w-4 text-indigo-500" /> : <Sun className="h-4 w-4 text-yellow-500" />}
-          </button>
+
+          {/* Connection Status for Mobile */}
+          <div className="flex items-center gap-2">
+            {connectionStatus.isOffline ? (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg animate-pulse">
+                <WifiOff className="h-3 w-3" />
+                {connectionStatus.pendingCount > 0 ? `${connectionStatus.pendingCount} Pending` : 'Offline'}
+              </span>
+            ) : connectionStatus.isSyncing ? (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-blue-500 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded-lg">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Syncing
+              </span>
+            ) : null}
+            
+            <button 
+              onClick={toggleTheme} 
+              className="h-8 w-8 rounded-lg bg-muted flex items-center justify-center border border-border"
+            >
+              {theme === 'light' ? <Moon className="h-4 w-4 text-indigo-500" /> : <Sun className="h-4 w-4 text-yellow-500" />}
+            </button>
+          </div>
         </header>
 
         {/* Dynamic Nested Routes */}

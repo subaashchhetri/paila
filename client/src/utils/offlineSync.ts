@@ -422,6 +422,7 @@ const updateCacheOptimistically = async (url: string, method: string, bodyObj: a
 };
 
 // URL rewriting helper for Capacitor / production environment
+// URL rewriting helper for Capacitor / production environment
 const getAbsoluteUrl = (url: string): string => {
   const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
   const isCapacitor = window.location.protocol === 'capacitor:';
@@ -429,11 +430,30 @@ const getAbsoluteUrl = (url: string): string => {
     window.location.hostname !== 'paila-todo.onrender.com' && 
     !window.location.hostname.includes('vercel.app');
   
-  if ((isCapacitor || isExternalHost) && url.startsWith('/api')) {
-    const baseUrl = import.meta.env.VITE_API_URL || 'https://paila-todo.onrender.com';
-    return `${baseUrl}${url}`;
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    if (parsedUrl.pathname.startsWith('/api')) {
+      if (isCapacitor || isExternalHost) {
+        const baseUrl = import.meta.env.VITE_API_URL || 'https://paila-todo.onrender.com';
+        const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+        const cleanPathname = parsedUrl.pathname.startsWith('/') ? parsedUrl.pathname : `/${parsedUrl.pathname}`;
+        return `${cleanBaseUrl}${cleanPathname}${parsedUrl.search}`;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to parse URL in getAbsoluteUrl:', e);
   }
   return url;
+};
+
+// Helper to standardize all cache keys to relative pathname + search query
+const getCacheKey = (url: string): string => {
+  try {
+    const parsedUrl = new URL(url, window.location.origin);
+    return `${parsedUrl.pathname}${parsedUrl.search}`;
+  } catch (e) {
+    return url;
+  }
 };
 
 // Global Fetch Interceptor
@@ -462,12 +482,13 @@ export const initializeOfflineSync = () => {
     }
 
     const method = init?.method?.toUpperCase() || 'GET';
+    const cacheKey = getCacheKey(url);
 
     // Handle GET (Read) Requests
     if (method === 'GET') {
       if (isOffline) {
         // Fallback to IndexedDB cache
-        const cache = await getFromStore('api_cache', url);
+        const cache = await getFromStore('api_cache', cacheKey);
         if (cache) {
           return new Response(JSON.stringify(cache.data), {
             status: 200,
@@ -485,12 +506,12 @@ export const initializeOfflineSync = () => {
           if (res.ok) {
             const cloned = res.clone();
             const data = await cloned.json();
-            await setToStore('api_cache', { url, data });
+            await setToStore('api_cache', { url: cacheKey, data });
           }
           return res;
         } catch (e) {
           // Network failed, try fallback
-          const cache = await getFromStore('api_cache', url);
+          const cache = await getFromStore('api_cache', cacheKey);
           if (cache) {
             return new Response(JSON.stringify(cache.data), {
               status: 200,
@@ -517,7 +538,7 @@ export const initializeOfflineSync = () => {
 
       // 3. Store in Sync Queue
       await setToStore('sync_queue', {
-        url,
+        url: cacheKey,
         method,
         headers: init?.headers || {},
         body: init?.body || '',
@@ -526,23 +547,23 @@ export const initializeOfflineSync = () => {
       });
 
       // 4. Update the IndexedDB GET cache optimistically so UI refreshes correctly
-      await updateCacheOptimistically(url, method, bodyObj, tempId);
+      await updateCacheOptimistically(cacheKey, method, bodyObj, tempId);
 
       // 5. Notify layout that queue length changed
       notifyStatusChange();
 
       // 6. Return simulated response
       let mockRes: any = { success: true };
-      if (url.includes('/api/todos') && method === 'POST') {
+      if (cacheKey.includes('/api/todos') && method === 'POST') {
         mockRes = { id: tempId, ...bodyObj, status: 'Pending' };
-      } else if ((url.includes('/api/finance/expense') || url.includes('/api/finance/income')) && method === 'POST') {
+      } else if ((cacheKey.includes('/api/finance/expense') || cacheKey.includes('/api/finance/income')) && method === 'POST') {
         mockRes = {
-          expense: url.includes('/expense') ? { id: tempId, ...bodyObj } : undefined,
-          income: url.includes('/income') ? { id: tempId, ...bodyObj } : undefined,
+          expense: cacheKey.includes('/expense') ? { id: tempId, ...bodyObj } : undefined,
+          income: cacheKey.includes('/income') ? { id: tempId, ...bodyObj } : undefined,
           walletBalance: 0,
           warning: null
         };
-      } else if (url.includes('/api/loans') && method === 'POST') {
+      } else if (cacheKey.includes('/api/loans') && method === 'POST') {
         mockRes = { id: tempId, ...bodyObj, status: 'Pending', paybackAmount: 0 };
       }
 

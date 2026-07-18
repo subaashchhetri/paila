@@ -256,9 +256,10 @@ router.delete('/income/:id', authenticateToken, async (req: AuthenticatedRequest
         throw new Error('Wallet associated with this income not found');
       }
 
-      if (wallet.balance < income.amount) {
-        throw new Error(`Cannot delete this income. Deducting Rs. ${income.amount} from ${wallet.name} would result in a negative balance (Current balance: Rs. ${wallet.balance})`);
-      }
+      // Negative balance safety check disabled per user request
+      // if (wallet.balance < income.amount) {
+      //   throw new Error(`Cannot delete this income. Deducting Rs. ${income.amount} from ${wallet.name} would result in a negative balance (Current balance: Rs. ${wallet.balance})`);
+      // }
 
       // Deduct wallet balance
       const updatedWallet = await tx.wallet.update({
@@ -374,6 +375,104 @@ router.delete('/budgets/:id', authenticateToken, async (req: AuthenticatedReques
     res.json({ message: 'Budget deleted successfully' });
   } catch (error: any) {
     res.status(400).json({ error: error.message || 'Failed to delete budget' });
+  }
+});
+
+// 7. Clear All Finance Data
+router.delete('/clear-all', authenticateToken, async (req: AuthenticatedRequest, res) => {
+  const userId = req.userId!;
+
+  try {
+    const updatedProfile = await prisma.$transaction(async (tx) => {
+      // 1. Delete all expense, income, loanGiven, loanTaken, transaction logs
+      await tx.expense.deleteMany({ where: { userId } });
+      await tx.income.deleteMany({ where: { userId } });
+      await tx.loanGiven.deleteMany({ where: { userId } });
+      await tx.loanTaken.deleteMany({ where: { userId } });
+      await tx.transaction.deleteMany({ where: { userId } });
+
+      // 2. Set all wallet balances to 0.0
+      await tx.wallet.updateMany({
+        where: { userId },
+        data: { balance: 0.0 }
+      });
+
+      // 3. Mark openingBalancesSetup as false in UserProfile
+      const profile = await tx.userProfile.update({
+        where: { userId },
+        data: { openingBalancesSetup: false }
+      });
+
+      return profile;
+    });
+
+    res.json({ message: 'All transactions cleared and balances reset.', profile: updatedProfile });
+  } catch (error: any) {
+    console.error('Clear all finance data error:', error);
+    res.status(500).json({ error: error.message || 'Failed to clear all finance data' });
+  }
+});
+
+const openingBalancesSchema = z.object({
+  body: z.object({
+    cash: z.number().nonnegative('Cash balance must be non-negative'),
+    bank: z.number().nonnegative('Bank balance must be non-negative'),
+    esewa: z.number().nonnegative('eSewa balance must be non-negative')
+  })
+});
+
+// 8. Set Opening Balances
+router.post('/opening-balances', authenticateToken, validate(openingBalancesSchema), async (req: AuthenticatedRequest, res) => {
+  const userId = req.userId!;
+  const { cash, bank, esewa } = req.body;
+
+  try {
+    const updatedProfile = await prisma.$transaction(async (tx) => {
+      const walletList = [
+        { name: 'Cash', balance: cash },
+        { name: 'Bank', balance: bank },
+        { name: 'eSewa', balance: esewa }
+      ];
+
+      for (const w of walletList) {
+        // Upsert wallet balance
+        const wallet = await tx.wallet.upsert({
+          where: {
+            userId_name: { userId, name: w.name }
+          },
+          update: { balance: w.balance },
+          create: { userId, name: w.name, balance: w.balance }
+        });
+
+        // Record opening balance transaction if balance is greater than 0
+        if (w.balance > 0) {
+          await tx.transaction.create({
+            data: {
+              userId,
+              walletId: wallet.id,
+              type: 'Income',
+              amount: w.balance,
+              category: 'Opening Balance',
+              description: `Initial setup balance for ${w.name}`,
+              date: new Date()
+            }
+          });
+        }
+      }
+
+      // Update UserProfile
+      const profile = await tx.userProfile.update({
+        where: { userId },
+        data: { openingBalancesSetup: true }
+      });
+
+      return profile;
+    });
+
+    res.json({ message: 'Opening balances set successfully', profile: updatedProfile });
+  } catch (error: any) {
+    console.error('Set opening balances error:', error);
+    res.status(400).json({ error: error.message || 'Failed to set opening balances' });
   }
 });
 

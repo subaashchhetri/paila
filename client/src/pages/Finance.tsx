@@ -21,7 +21,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const Finance: React.FC = () => {
-  const { token } = useAuth();
+  const { token, user, updateProfileState } = useAuth();
   const { showToast } = useNotification();
 
   // Financial status state
@@ -45,6 +45,10 @@ export const Finance: React.FC = () => {
 
   // Forms active states
   const [formOpen, setFormOpen] = useState<'expense' | 'income' | null>(null);
+  const [openingBalancesModalOpen, setOpeningBalancesModalOpen] = useState(false);
+  const [openCash, setOpenCash] = useState<number>(0);
+  const [openBank, setOpenBank] = useState<number>(0);
+  const [openEsewa, setOpenEsewa] = useState<number>(0);
 
   // Search & Filter state
   const [search, setSearch] = useState('');
@@ -329,6 +333,66 @@ export const Finance: React.FC = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!confirm('WARNING: Are you sure you want to CLEAR ALL finance transactions? This will delete all income, expenses, and loans, reset all balances to 0.0, and allow you to set new opening balances.')) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/finance/clear-all', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('All financial data cleared and reset to 0.', 'success');
+        if (data.profile) {
+          updateProfileState(data.profile);
+        }
+        fetchFinancials();
+        fetchTransactions();
+      } else {
+        showToast(data.error || 'Failed to clear financial data', 'error');
+      }
+    } catch (err) {
+      showToast('Network error', 'error');
+    }
+  };
+
+  const handleSaveOpeningBalances = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await fetch('/api/finance/opening-balances', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          cash: openCash,
+          bank: openBank,
+          esewa: openEsewa
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Opening balances updated successfully!', 'success');
+        if (data.profile) {
+          updateProfileState(data.profile);
+        }
+        setOpeningBalancesModalOpen(false);
+        fetchFinancials();
+        fetchTransactions();
+      } else {
+        showToast(data.error || 'Failed to set opening balances', 'error');
+      }
+    } catch (err) {
+      showToast('Network error', 'error');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 w-full">
       {/* 1. Header */}
@@ -337,7 +401,7 @@ export const Finance: React.FC = () => {
           <h1 className="font-bold text-2xl tracking-tight">Finance Ledger</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage Cash, Bank, and eSewa accounts.</p>
         </div>
-        <div className="flex gap-2 w-full md:w-auto">
+        <div className="flex gap-2 w-full md:w-auto flex-wrap">
           <button
             onClick={() => setFormOpen('income')}
             className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-2 bg-green-600 text-white font-semibold rounded-xl text-sm hover:opacity-90 transition-all cursor-pointer shadow-sm"
@@ -352,8 +416,42 @@ export const Finance: React.FC = () => {
             <ArrowDownLeft className="h-4.5 w-4.5" />
             <span>Add Expense</span>
           </button>
+          <button
+            onClick={handleClearAll}
+            className="flex-1 md:flex-none flex items-center justify-center gap-1.5 px-4 py-2 border border-red-500/35 hover:bg-red-500/10 text-red-500 font-semibold rounded-xl text-sm transition-all cursor-pointer shadow-sm"
+            title="Clear all transactions and reset balances to 00"
+          >
+            <Trash2 className="h-4.5 w-4.5" />
+            <span>Clear All</span>
+          </button>
         </div>
       </section>
+
+      {/* Opening Balances Setup Banner */}
+      {user?.profile && !user.profile.openingBalancesSetup && (
+        <section className="bg-amber-500/10 border border-amber-500/25 p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 soft-shadow">
+          <div>
+            <h3 className="font-bold text-sm text-amber-500 flex items-center gap-1.5">
+              <AlertTriangle className="h-4.5 w-4.5" />
+              <span>Set Your Opening Balances</span>
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              You cleared all financial transactions. You can now set the initial opening balance for your Cash, Bank, and eSewa accounts.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              setOpenCash(0);
+              setOpenBank(0);
+              setOpenEsewa(0);
+              setOpeningBalancesModalOpen(true);
+            }}
+            className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-xl text-xs transition-colors cursor-pointer shadow-sm text-center"
+          >
+            Set Balances
+          </button>
+        </section>
+      )}
 
       {/* 2. Accounts & Available Balances */}
       <section className="flex flex-col gap-3">
@@ -893,6 +991,83 @@ export const Finance: React.FC = () => {
                   }`}
                 >
                   Record {formOpen === 'expense' ? 'Expense' : 'Income'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Set Opening Balances Modal */}
+      <AnimatePresence>
+        {openingBalancesModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setOpeningBalancesModalOpen(false)}
+              className="fixed inset-0 bg-background/80 backdrop-blur-sm cursor-pointer"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-card border border-border p-6 rounded-2xl soft-shadow relative z-10"
+            >
+              <div className="flex justify-between items-center border-b border-border pb-4 mb-4">
+                <h3 className="font-bold text-lg">Set Opening Balances</h3>
+                <button onClick={() => setOpeningBalancesModalOpen(false)} className="p-1 rounded-lg hover:bg-muted cursor-pointer text-muted-foreground">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveOpeningBalances} className="flex flex-col gap-4">
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Enter the starting balance for each account. This will update the available balance and record a ledger transaction of type "Opening Balance".
+                </p>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cash in Hand (NPR)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={openCash}
+                    onChange={(e) => setOpenCash(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="Rs. 0"
+                    className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Bank Account (NPR)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={openBank}
+                    onChange={(e) => setOpenBank(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="Rs. 0"
+                    className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">eSewa Wallet (NPR)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={openEsewa}
+                    onChange={(e) => setOpenEsewa(e.target.value === '' ? 0 : Number(e.target.value))}
+                    placeholder="Rs. 0"
+                    className="w-full px-3 py-2 bg-muted/30 border border-border rounded-xl text-sm font-semibold focus:outline-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 font-semibold text-white rounded-xl text-sm bg-amber-600 hover:bg-amber-500 transition-all cursor-pointer shadow-md mt-2"
+                >
+                  Save Opening Balances
                 </button>
               </form>
             </motion.div>

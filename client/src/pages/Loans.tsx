@@ -10,7 +10,8 @@ import {
   CheckCircle, 
   ArrowUpRight,
   ArrowDownRight,
-  X
+  X,
+  Wallet
 } from 'lucide-react';
 
 import { motion, AnimatePresence } from 'framer-motion';
@@ -30,6 +31,7 @@ export const Loans: React.FC = () => {
     upcomingDues: [] as any[]
   });
   const [loading, setLoading] = useState(true);
+  const [walletTotal, setWalletTotal] = useState<number>(0);
 
   // New Loan Form modal state
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -63,6 +65,15 @@ export const Loans: React.FC = () => {
         setLoansGiven(data.loansGiven);
         setLoansTaken(data.loansTaken);
         setDashboard(data.dashboard);
+      }
+
+      // Fetch consolidated wallet total
+      const walletsRes = await fetch('/api/wallets', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (walletsRes.ok) {
+        const walletsData = await walletsRes.json();
+        setWalletTotal(walletsData.summary.total);
       }
     } catch (e) {
       console.error(e);
@@ -217,7 +228,30 @@ export const Loans: React.FC = () => {
       </section>
 
       {/* 2. Summaries stats dashboard */}
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        {/* Total Available Balance */}
+        <div className="p-4.5 bg-primary text-primary-foreground rounded-2xl soft-shadow flex items-center gap-3 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 h-24 w-24 bg-white/5 rounded-full blur-xl group-hover:scale-125 transition-transform" />
+          <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center text-white relative z-10">
+            <Wallet className="h-5 w-5" />
+          </div>
+          <div className="relative z-10">
+            <span className="text-lg font-bold block">Rs. {walletTotal.toLocaleString()}</span>
+            <span className="text-[10px] text-primary-foreground/75 font-semibold uppercase tracking-wider">Available Balance</span>
+          </div>
+        </div>
+
+        {/* Total if Received */}
+        <div className="p-4.5 bg-card border border-accent/40 rounded-2xl soft-shadow flex items-center gap-3 relative overflow-hidden group">
+          <div className="h-10 w-10 rounded-xl bg-accent/10 border border-accent/15 flex items-center justify-center text-accent">
+            <Plus className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-lg font-bold block text-accent">Rs. {(walletTotal + dashboard.pendingReceivable).toLocaleString()}</span>
+            <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Total (If Received)</span>
+          </div>
+        </div>
+
         {/* Total given */}
         <div className="p-4.5 bg-card border border-border rounded-2xl soft-shadow flex items-center gap-3">
           <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center text-indigo-500">

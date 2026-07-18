@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.js';
 import { useTheme } from '../context/ThemeContext.js';
 import { useNotification } from '../context/NotificationContext.js';
@@ -13,14 +14,16 @@ import {
   Globe, 
   Bell, 
   Trash2, 
-  Save
+  Save,
+  LogOut
 } from 'lucide-react';
 
 
 export const Profile: React.FC = () => {
-  const { user, token, deleteAccount, updateProfileState } = useAuth();
+  const { user, token, deleteAccount, updateProfileState, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { showToast } = useNotification();
+  const navigate = useNavigate();
 
   // Edit details form states
   const [name, setName] = useState(user?.profile.name || '');
@@ -88,6 +91,16 @@ export const Profile: React.FC = () => {
       // Error handles in context
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      showToast('Logged out successfully!', 'info');
+      navigate('/login');
+    } catch (err) {
+      showToast('Failed to log out', 'error');
     }
   };
 
@@ -282,6 +295,23 @@ export const Profile: React.FC = () => {
                 className="w-full py-2 bg-primary text-primary-foreground font-semibold rounded-xl text-xs hover:opacity-90 transition-all cursor-pointer shadow-sm mt-1"
               >
                 Apply Preferences
+              </button>
+            </div>
+          </div>
+
+          {/* Session Management */}
+          <div className="p-6 bg-card border border-border rounded-2xl soft-shadow flex flex-col gap-4">
+            <h2 className="font-bold text-base leading-none border-b border-border pb-3">Session</h2>
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-muted-foreground leading-normal">
+                Log out of your current session on this device. Your offline changes will sync automatically next time you log in online.
+              </p>
+              <button
+                onClick={handleLogout}
+                className="w-full py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 font-semibold rounded-xl text-xs cursor-pointer transition-all flex items-center justify-center gap-1.5 border border-red-500/20 active:scale-[0.98]"
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Log Out</span>
               </button>
             </div>
           </div>

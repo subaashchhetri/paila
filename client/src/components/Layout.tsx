@@ -168,7 +168,7 @@ export const Layout: React.FC = () => {
       {/* 2. Main Page Container */}
       <main className="flex-grow pb-24 md:pb-6 overflow-y-auto px-4 sm:px-6 md:px-8 py-6 md:py-8 max-w-7xl mx-auto w-full">
         {/* Header (Mobile Title / Desktop Header bar) */}
-        <header className="flex justify-between items-center mb-6 md:mb-8 md:hidden">
+        <header className="flex justify-between items-center mb-6 md:mb-8 md:hidden" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}>
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-accent flex items-center justify-center text-accent-foreground font-black text-lg">
               P

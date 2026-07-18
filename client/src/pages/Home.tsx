@@ -336,7 +336,7 @@ export const Home: React.FC = () => {
         </div>
 
         {/* Daily Motivation banner */}
-        <div className="bg-accent/10 border border-accent/15 py-2.5 px-4 rounded-xl text-xs text-accent font-semibold flex items-center gap-2 shadow-sm max-w-sm">
+        <div className="hidden md:flex bg-accent/10 border border-accent/15 py-2.5 px-4 rounded-xl text-xs text-accent font-semibold items-center gap-2 shadow-sm max-w-sm">
           <Sparkles className="h-4.5 w-4.5 text-accent flex-shrink-0" />
           <span className="italic leading-normal">"Plan first, then do. One step at a time."</span>
         </div>
